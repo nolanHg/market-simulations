@@ -1,0 +1,14 @@
+Example of how to make subplots with ggplot2:
+
+
+library(gridExtra)
+library(ggplot2)
+
+p1 <- qplot(x1, y1, data = df1)
+p2 <- qplot(x2, y2, data = df2)
+p3 <- qplot(x3, y3, data = df3)
+p4 <- qplot(x4, y4, data = df4)
+
+...
+
+grid.arrange(p1, p2, p3, p4, ..., nrow = n)
