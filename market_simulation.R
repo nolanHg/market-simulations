@@ -1,31 +1,60 @@
+################################
+## 	   LIBRARIES          ##
+################################
 library("ggplot2")
 library("gridExtra")
 library("rmutil")
 library("rvest")
 
+
 ################################
-#          CONSTANTS           #
+##         CONSTANTS          ##
 ################################
 TICK_SIZE <- 0.001
 
-## FUNCTION: gets actual price of stock from the Internet
+
+################################
+##	   FUNCTIONS          ##
+################################
+
+
+##############################################################################
+## BRIEF: Gets actual price of a stock from the Internet.                   ##
+## PARAM ticker: Stock exchange code for stock of interest                  ##
+##	         (e.g., BAC is the ticker for Bank of America Corporation). ##
+## RETURNS: Current stock price as a numeric type.                          ##
+##############################################################################
 get_current_price <- function(ticker)
 {
+	## Download HTML data from stock's Yahoo finance page
 	url <- paste("https://finance.yahoo.com/quote/", ticker, "?p=", ticker, sep = "")
 	html_data <- read_html(url)
-
+	
+	## Extract price data from Yahoo finance page
 	div_span_elems <- html_data %>% 
 		          html_nodes('div span') %>%
 		          html_text()	
-
 	current_price <- as.numeric(div_span_elems[11])
+	
+	## Indicate that price data for current stock has been extracted
 	print(paste("--> ", ticker, " price download complete: ", "$", div_span_elems[11], " per share", sep = ""))
-
+	
+	## Return current price to caller
 	return(invisible(current_price))
 }
 
 
-## FUNCTION: distributes money supply in economy according to Pareto distribution
+###############################################################################
+## BRIEF: Distributes money supply in economy according to Pareto            ##
+##	  distribution.							     ##
+## PARAM step_size: Size of movement along Pareto CDF.	         	     ##
+## PARAM supply: Total amount of money to distribute amongst the traders.    ##
+## PARAM n_traders: Number of traders to distribute money to.	             ##
+## PARAM loc: Location parameter of Pareto distribution.		     ##
+## PARAM disp: Dispersion parameter of Pareto distribution.		     ##
+## RETURNS: Vector containing the amount of money each trader has been       ##
+##          allotted.							     ##
+###############################################################################
 distribute_wealth_pareto <- function(step_size = 0.1, supply = 1e12, n_traders = 500, loc = 1, disp = 1.5)
 {
 	## Allocate memory for vector
@@ -38,7 +67,10 @@ distribute_wealth_pareto <- function(step_size = 0.1, supply = 1e12, n_traders =
 	return(invisible(wealth_v))
 }
 
+
+##
 ## FUNCTION: distributes shares of stock according to Pareto distribution
+##
 distribute_shares_pareto <- function(step_size = 0.1, stock_names_v, n_shares_v, n_traders = 500, loc = 1, disp = 3)
 {
 	## Allocate memory for data-frame
@@ -56,7 +88,10 @@ distribute_shares_pareto <- function(step_size = 0.1, stock_names_v, n_shares_v,
 	return(invisible(ownership_df))
 }
 
+
+##
 ## FUNCTION: Displays historical stock charts after completion of simulation
+##
 display_stock_charts <- function(num_stocks = 6, tickers_v, pdata_l, t)
 {
 	col_det <- lapply(pdata_l, FUN = function(x_v) x_v[length(x_v)] - x_v[1])		
@@ -73,7 +108,10 @@ display_stock_charts <- function(num_stocks = 6, tickers_v, pdata_l, t)
 	grid.arrange(grobs = plots, nrow = num_stocks / 2)
 }
 
+
+##
 ## FUNCTION: Runs simulation of the stock market
+##
 market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 1000,
 	               n_mom_traders = 1000, n_rand_traders = 1000)
 {
@@ -85,6 +123,8 @@ market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 100
 	
 	############################################
 	## 		Set-up stocks             ##
+        ##		    and                   ##
+	##               companies                ##
 	############################################
 	tickers_v <- c("GS", "BAC", "SWKS", "GOOS", "UPS", "JPM")
 
