@@ -136,20 +136,19 @@ distribute_shares_pareto <- function(step_size = 0.1, stock_names_v, n_shares_v,
 ## PARAM t: Price data is graphed from time 0 to time t.		    ##
 ## RETURNS: Void.							    ##
 ##############################################################################
-display_stock_charts <- function(num_stocks = 6, tickers_v, pdata_l, t)
+display_stock_charts <- function(stocks_df)
 {
-	col_det <- lapply(pdata_l, FUN = function(x_v) x_v[length(x_v)] - x_v[1])		
+	col_det <- apply(stocks_df[,], MARGIN = 2, FUN = function(x_v) x_v[length(x_v)] - x_v[1])		
 	colors <- ifelse(col_det < 0, "red", "#119334")
-
-	plots <- mapply(pdata_l, as.list(tickers_v), colors,
-		        FUN = function(x_v, y, z) qplot(0:t, x_v, geom = "line", xlab = "Time", ylab = "Price", main = y) + 
+	plots <- mapply(as.list(stocks_df), as.list(colnames(stocks_df)), colors,
+		        FUN = function(x_v, y, z) qplot(0 : (length(x_v) - 1), x_v, geom = "line", xlab = "Time", ylab = "Price", main = y) + 
 			guides(colour = "none") + geom_line(color = z) + 
 			annotate(geom = "text", x = 125, y = 30, label = "Q1") +
 			annotate(geom = "text", x = 250, y = 30, label = "Q2") +
 			annotate(geom = "text", x = 375, y = 30, label = "Q3"),
 		        SIMPLIFY = FALSE)	
 
-	grid.arrange(grobs = plots, nrow = num_stocks / 2)
+	grid.arrange(grobs = plots, nrow = length(colnames(stocks_df)) / 2)
 }
 
 
@@ -174,8 +173,6 @@ market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 100
 	Q2 <- floor(2 * (n_steps / 4))
 	Q3 <- floor(3 * (n_steps / 4))
 		
-	time <- 0
-	
 	############################################
 	## 		Set-up stocks             ##
         ##		    and                   ##
@@ -187,18 +184,10 @@ market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 100
 	colnames(stocks_df) <- tickers_v
 
 	print("Downloading current stock prices ...")
-	stocks_df[1, ] <- apply(tickers_v, MARGIN = 1, FUN = function(t) get_current_price(t))
-	gs_hist[1] <- get_current_price("GS")
-	bac_hist[1] <- get_current_price("BAC") 
-	swks_hist[1] <- get_current_price("SWKS") 
-	goos_hist[1] <- get_current_price("GOOS") 
-	ups_hist[1] <- get_current_price("UPS") 
-	jpm_hist[1] <- get_current_price("JPM") 
+	stocks_df[1, ] <- apply(tickers_v, MARGIN = 2, FUN = function(t) get_current_price(t))
 	print("All downloads complete. Running simulation ...")
-		
-	moving_avg_mem_gs <- list(oldest = gs_hist[1], prev_sum = gs_hist[1])
 
-	pdata_l <- list(gs_hist, bac_hist, swks_hist, goos_hist, ups_hist, jpm_hist)
+#	moving_avg_mem_gs <- list(oldest = gs_hist[1], prev_sum = gs_hist[1])
 
 	gs_health <- list(p_vneg = 0.1, p_neg = 0.3, p_pos = 0.4, p_vpos = 0.2)
 	bac_health <- list(p_vneg = 0.1, p_neg = 0.2, p_pos = 0.4, p_vpos = 0.3)	
@@ -253,7 +242,7 @@ market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 100
 		####################################
 		##  Calculate supply and demand   ##
 		####################################
-		supply_v <- apply(shrs_outs_v, 2, FUN = function(x) runif(n = 1, min = 0, max = x))
+		supply_v <- apply(shrs_outs_v, MARGIN = 2, FUN = function(x) runif(n = 1, min = 0, max = x))
 		demand_v <- runif(n = 6, min = 0, max = n_traders)
 		
 		if (!is.null(q_results_l[[1]])) {
@@ -271,11 +260,14 @@ market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 100
 		}
 
 		demsupp_diff_v <- demand_v - supply_v 
+
+		stocks_df[k + 1, ] <- mapply(stocks_df[k, ], demsupp_diff_v, FUN = function(x, y) 
+					    ifelse(x < 0, 0, x + TICK_SIZE * y + rnorm(1, mean = 0, sd = 0.002))) 
 		
-		for (i in 1 : length(tickers_v)) {
-			pdata_l[[i]][k + 1] <- ifelse(pdata_l[[i]][k] <= 0, 0, 
-						      pdata_l[[i]][k] + TICK_SIZE * demsupp_diff_v[i] + rnorm(1, mean = 0, sd = 0.002))
-		}
+#		for (i in 1 : length(tickers_v)) {
+#			pdata_l[[i]][k + 1] <- ifelse(pdata_l[[i]][k] <= 0, 0, 
+#						      pdata_l[[i]][k] + TICK_SIZE * demsupp_diff_v[i] + rnorm(1, mean = 0, sd = 0.002))
+#		}
 
 		##################################
 		##  Execute trading strategies  ##
@@ -283,26 +275,26 @@ market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 100
 		
 		## Make moving average observation every 50 time-steps
 
-		moving_avg_mem_gs$oldest <- ifelse(time <= 50, 0, pdata_l[[1]][time - 50])
-		moving_avg_mem_gs$prev_sum <- ifelse(time <= 50, moving_avg_mem_gs$prev_sum + pdata_l[[1]][k + 1],
-						     moving_avg_mem_gs$prev_sum + pdata_l[[1]][k + 1] - moving_avg_mem_gs$oldest)
-
-		moving_avg_gs <- ifelse(k < 50, NA, moving_avg_mem_gs$prev_sum / 50)
-
-		if (k %% 50 == 0 && k >= 100) {
-			print(moving_avg_obs_gs)
-			print(moving_avg_gs)
-			exec_momentum_strategy(mom_df, moving_avg_obs_gs, moving_avg_gs)
-		}
-
-		if (k %% 50 == 0) {
-			moving_avg_obs_gs <- moving_avg_gs	
-		}
+#		moving_avg_mem_gs$oldest <- ifelse(time <= 50, 0, pdata_l[[1]][time - 50])
+#		moving_avg_mem_gs$prev_sum <- ifelse(time <= 50, moving_avg_mem_gs$prev_sum + pdata_l[[1]][k + 1],
+#						     moving_avg_mem_gs$prev_sum + pdata_l[[1]][k + 1] - moving_avg_mem_gs$oldest)
+#
+#		moving_avg_gs <- ifelse(k < 50, NA, moving_avg_mem_gs$prev_sum / 50)
+#
+#		if (k %% 50 == 0 && k >= 100) {
+#			print(moving_avg_obs_gs)
+#			print(moving_avg_gs)
+#			exec_momentum_strategy(mom_df, moving_avg_obs_gs, moving_avg_gs)
+#		}
+#
+#		if (k %% 50 == 0) {
+#			moving_avg_obs_gs <- moving_avg_gs	
+#		}
 
 		time <- time + 1
 	}
 
-	display_stock_charts(num_stocks = 6, tickers_v, pdata_l, time)
+	display_stock_charts(stocks_df)
 
 	return(invisible(traders_df))
 }
