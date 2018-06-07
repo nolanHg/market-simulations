@@ -17,6 +17,37 @@ TICK_SIZE <- 0.001
 ##	   FUNCTIONS          ##
 ################################
 
+exec_momentum_strategy <- function(mom_df, prev_obs, curr_obs)
+{
+	if (curr_obs > prev_obs) {
+		print("BUY")
+	} else {
+		print("SELL")
+	}
+}
+
+
+exec_fundamental_strategy <- function(fund_df)
+{
+
+}
+
+
+exec_hft_strategy <- function(hft_df)
+{
+
+}
+
+
+exec_rand_strategy <- function(rand_df)
+{
+
+}
+
+calc_stock_prices <- function(tickers_v, supply_v, demand_v, prev_prices_v)
+{
+
+}
 
 ##############################################################################
 ## BRIEF: Gets actual price of a stock from the Internet.                   ##
@@ -150,16 +181,13 @@ market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 100
         ##		    and                   ##
 	##               companies                ##
 	############################################
-	tickers_v <- c("GS", "BAC", "SWKS", "GOOS", "UPS", "JPM")
-
-	gs_hist <- rep(NA, n_steps)
-	bac_hist <- rep(NA, n_steps)
-	swks_hist <- rep(NA, n_steps)
-	goos_hist <- rep(NA, n_steps)
-	ups_hist <- rep(NA, n_steps)
-	jpm_hist <- rep(NA, n_steps)
+	tickers_v <- cbind("GS", "BAC", "SWKS", "GOOS", "UPS", "JPM")
 	
+	stocks_df <- data.frame(matrix(NA, nrow = n_steps, ncol = length(tickers_v)))
+	colnames(stocks_df) <- tickers_v
+
 	print("Downloading current stock prices ...")
+	stocks_df[1, ] <- apply(tickers_v, MARGIN = 1, FUN = function(t) get_current_price(t))
 	gs_hist[1] <- get_current_price("GS")
 	bac_hist[1] <- get_current_price("BAC") 
 	swks_hist[1] <- get_current_price("SWKS") 
@@ -167,6 +195,8 @@ market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 100
 	ups_hist[1] <- get_current_price("UPS") 
 	jpm_hist[1] <- get_current_price("JPM") 
 	print("All downloads complete. Running simulation ...")
+		
+	moving_avg_mem_gs <- list(oldest = gs_hist[1], prev_sum = gs_hist[1])
 
 	pdata_l <- list(gs_hist, bac_hist, swks_hist, goos_hist, ups_hist, jpm_hist)
 
@@ -200,23 +230,32 @@ market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 100
 	traders_df <- data.frame(1 : n_traders, capital_v, tags_m, ownership_df)  
 	colnames(traders_df) <- c("ID", "CAPITAL", "STRATEGY", tickers_v)
 	
+	mom_df <- subset(traders_df, STRATEGY == "MOM")
+	fund_df <- subset(traders_df, STRATEGY == "FUND")
+	hft_df <- subset(traders_df, STRATEGY == "HFT")
+	rand_df <- subset(traders_df, STRATEGY == "RAND") 
+	
 	#############################################
 	##          Run market simulation	   ##
 	#############################################
 	q_results_l <- vector("list", length(tickers_v))
 	
-	for (k in 2 : n_steps) {
-
-		## Issue quarterly reports
+	for (k in 1 : n_steps) {
+		
+		###############################
+		##  Issue quarterly reports  ##
+		###############################
 		if (time == Q1 || time == Q2 || time == Q3) {
 			q_results_l <- lapply(comp_healths_l, FUN = function(x) issue_earnings_report(p_vneg = x$p_vneg, p_neg = x$p_neg, 
 												      p_pos = x$p_pos, p_vpos = x$p_vpos))
 		}
-
-		## Calculate supply and demand	
+		
+		####################################
+		##  Calculate supply and demand   ##
+		####################################
 		supply_v <- apply(shrs_outs_v, 2, FUN = function(x) runif(n = 1, min = 0, max = x))
 		demand_v <- runif(n = 6, min = 0, max = n_traders)
-
+		
 		if (!is.null(q_results_l[[1]])) {
 			for (j in 1 : length(q_results_l)) {
 				if (q_results_l[[j]] == "VNEG") {
@@ -234,10 +273,32 @@ market_sim <- function(n_steps = 500, n_hft_traders = 1000, n_fund_traders = 100
 		demsupp_diff_v <- demand_v - supply_v 
 		
 		for (i in 1 : length(tickers_v)) {
-			pdata_l[[i]][k] <- ifelse(pdata_l[[i]][k-1] <= 0, 0, 
-						  pdata_l[[i]][k - 1] + TICK_SIZE * demsupp_diff_v[i] + rnorm(1, mean = 0, sd = 0.002))
+			pdata_l[[i]][k + 1] <- ifelse(pdata_l[[i]][k] <= 0, 0, 
+						      pdata_l[[i]][k] + TICK_SIZE * demsupp_diff_v[i] + rnorm(1, mean = 0, sd = 0.002))
 		}
+
+		##################################
+		##  Execute trading strategies  ##
+		##################################
 		
+		## Make moving average observation every 50 time-steps
+
+		moving_avg_mem_gs$oldest <- ifelse(time <= 50, 0, pdata_l[[1]][time - 50])
+		moving_avg_mem_gs$prev_sum <- ifelse(time <= 50, moving_avg_mem_gs$prev_sum + pdata_l[[1]][k + 1],
+						     moving_avg_mem_gs$prev_sum + pdata_l[[1]][k + 1] - moving_avg_mem_gs$oldest)
+
+		moving_avg_gs <- ifelse(k < 50, NA, moving_avg_mem_gs$prev_sum / 50)
+
+		if (k %% 50 == 0 && k >= 100) {
+			print(moving_avg_obs_gs)
+			print(moving_avg_gs)
+			exec_momentum_strategy(mom_df, moving_avg_obs_gs, moving_avg_gs)
+		}
+
+		if (k %% 50 == 0) {
+			moving_avg_obs_gs <- moving_avg_gs	
+		}
+
 		time <- time + 1
 	}
 
