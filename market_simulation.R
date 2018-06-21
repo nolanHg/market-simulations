@@ -138,9 +138,9 @@ display_stock_charts <- function(stocks_df)
 ##	    about each trader in the simulation.			    ##
 ##############################################################################
 market_sim <- function(n_steps = 400, 
-		       n_hft_traders = 1000, 
+		       n_hft_traders = 1000, hft_freq = 10,
 		       n_fund_traders = 1000,
-	               n_mom_traders = 1000, mavg_l = 20,
+	               n_mom_traders = 1000, mavg_l = 40,
 		       n_rand_traders = 1000)
 {
 	## Times at which quarterly reports will be issued by the companies
@@ -202,8 +202,10 @@ market_sim <- function(n_steps = 400,
 	#############################################
 	##          Run market simulation	   ##
 	#############################################
-	q_results_l <- vector("list", length(TICKERS_V))
-	
+#	q_results_l <- vector("list", length(TICKERS_V))
+	q_results_l <- lapply(comp_healths_l, FUN = function(x) issue_earnings_report(p_vneg = x$p_vneg, p_neg = x$p_neg, 
+												      p_pos = x$p_pos, p_vpos = x$p_vpos))
+
 	## Sum used to compute price's moving average
 	sum_last_obs_v <- rep(0, NUM_STOCKS)
 	sum_last_obs_v <- as.numeric(stocks_df[1,])
@@ -235,10 +237,11 @@ market_sim <- function(n_steps = 400,
 					        sum_last_obs_v + as.numeric(stocks_df[t, ]) - as.numeric(stocks_df[t - mavg_l, ]))
 		
 		mavg_v <- sum_last_obs_v / mavg_l 
-		## If price exceeds 20-step moving average by 2%, buy 100 shares
-		## else if price is below 20-step moving average by 2%, sell 100 shares
+
+		## If price exceeds n-step moving average by 2%, buy 100 shares
+		## else if price is below n-step moving average by 2%, sell 100 shares
 		## else hold 
-		if (t %% 20 == 0) {
+		if (t %% 40 == 0) { ## Trade every 40 steps
 			for (j in 1 : NUM_STOCKS) {
 				if (current_prices_v[j] >= mavg_v[j] * 1.02) {
 
@@ -300,12 +303,126 @@ market_sim <- function(n_steps = 400,
 		#########
 		## HFT ##
 		#########
-
+		
+		## If last quarterly report was very positive, buy stock whenever price is 1% below moving average
+		## 					       sell stock whenever price is 2% above moving average
+		
+		## If last quarterly report was positive, buy stock whenever price is 2% below moving average
+		##					  sell stock whenever price is 2% above moving average
 	
+		## If last quarterly report was negative, buy stock whenever price is 3% below moving average
+		##					  sell stock whenever price is 1% above moving average
+		
+		## If last quarterly report was very negative, buy stock whenever price is 4% below moving average
+		##					       sell stock whenever price is 1% above moving average
+		
+		if (t %% hft_freq == 0) { ## Trade every hft_freq steps
+			
+			for (j in 1 : NUM_STOCKS) {
+				if (q_results_l[[j]] == "VGOOD") {
+					if (current_prices_v[j] <= mavg_v[j] * 0.99) { ## BUY
+						for (k in 1 : n_hft_traders) {
+							if (hft_df["CAPITAL"][k,] >= 100 * current_prices_v[j]) {
+
+								demand_v[j] <- demand_v[j] + 10
+								supply_v[j] <- supply_v[j] - 10
+								hft_df["CAPITAL"][k,] <- hft_df["CAPITAL"][k,] - 100 * current_prices_v[j]
+								hft_df[TICKERS_V[j]][k,] <- hft_df[TICKERS_V[j]][k,] + 100
+
+							}
+						}
+					} else if (current_prices_v[j] >= mavg_v[j] * 1.02) { ## SELL
+						for (k in 1 : n_hft_traders) {
+							if (hft_df[TICKERS_V[j]][k,] >= 100) {
+								demand_v[j] <- demand_v[j] - 10
+								supply_v[j] <- supply_v[j] + 10
+								hft_df["CAPITAL"][k,] <- hft_df["CAPITAL"][k,] + 100 * current_prices_v[j]
+								hft_df[TICKERS_V[j]][k,] <- hft_df[TICKERS_V[j]][k,] - 100
+							}
+						}
+					}
+				} else if (q_results_l[[j]] == "GOOD") {
+					if (current_prices_v[j] <= mavg_v[j] * 0.98) { ## BUY
+						for (k in 1 : n_hft_traders) {
+							if (hft_df["CAPITAL"][k,] >= 100 * current_prices_v[j]) {
+
+								demand_v[j] <- demand_v[j] + 10
+								supply_v[j] <- supply_v[j] - 10
+								hft_df["CAPITAL"][k,] <- hft_df["CAPITAL"][k,] - 100 * current_prices_v[j]
+								hft_df[TICKERS_V[j]][k,] <- hft_df[TICKERS_V[j]][k,] + 100
+
+							}
+						}
+					} else if (current_prices_v[j] >= mavg_v[j] * 1.02) { ## SELL
+						for (k in 1 : n_hft_traders) {
+							if (hft_df[TICKERS_V[j]][k,] >= 100) {
+								demand_v[j] <- demand_v[j] - 10
+								supply_v[j] <- supply_v[j] + 10
+								hft_df["CAPITAL"][k,] <- hft_df["CAPITAL"][k,] + 100 * current_prices_v[j]
+								hft_df[TICKERS_V[j]][k,] <- hft_df[TICKERS_V[j]][k,] - 100
+							}
+						}
+					}
+
+				} else if (q_results_l[[j]] == "BAD") {
+					if (current_prices_v[j] <= mavg_v[j] * 0.97) { ## BUY
+						for (k in 1 : n_hft_traders) {
+							if (hft_df["CAPITAL"][k,] >= 100 * current_prices_v[j]) {
+
+								demand_v[j] <- demand_v[j] + 10
+								supply_v[j] <- supply_v[j] - 10
+								hft_df["CAPITAL"][k,] <- hft_df["CAPITAL"][k,] - 100 * current_prices_v[j]
+								hft_df[TICKERS_V[j]][k,] <- hft_df[TICKERS_V[j]][k,] + 100
+
+							}
+						}
+					} else if (current_prices_v[j] >= mavg_v[j] * 1.01) { ## SELL
+						for (k in 1 : n_hft_traders) {
+							if (hft_df[TICKERS_V[j]][k,] >= 100) {
+								demand_v[j] <- demand_v[j] - 10
+								supply_v[j] <- supply_v[j] + 10
+								hft_df["CAPITAL"][k,] <- hft_df["CAPITAL"][k,] + 100 * current_prices_v[j]
+								hft_df[TICKERS_V[j]][k,] <- hft_df[TICKERS_V[j]][k,] - 100
+							}
+						}
+					}
+
+				
+				} else {
+					if (current_prices_v[j] <= mavg_v[j] * 0.96) { ## BUY
+						for (k in 1 : n_hft_traders) {
+							if (hft_df["CAPITAL"][k,] >= 100 * current_prices_v[j]) {
+
+								demand_v[j] <- demand_v[j] + 10
+								supply_v[j] <- supply_v[j] - 10
+								hft_df["CAPITAL"][k,] <- hft_df["CAPITAL"][k,] - 100 * current_prices_v[j]
+								hft_df[TICKERS_V[j]][k,] <- hft_df[TICKERS_V[j]][k,] + 100
+
+							}
+						}
+					} else if (current_prices_v[j] >= mavg_v[j] * 1.01) { ## SELL
+						for (k in 1 : n_hft_traders) {
+							if (hft_df[TICKERS_V[j]][k,] >= 100) {
+								demand_v[j] <- demand_v[j] - 10
+								supply_v[j] <- supply_v[j] + 10
+								hft_df["CAPITAL"][k,] <- hft_df["CAPITAL"][k,] + 100 * current_prices_v[j]
+								hft_df[TICKERS_V[j]][k,] <- hft_df[TICKERS_V[j]][k,] - 100
+							}
+						}
+					}
+
+				}
+			
+			}	
+		}
+
 		#################
 		## FUNDAMENTAL ##
 		#################
-
+		
+		## Only buy and sell stocks after quarterly reports have been issued.
+		## More likely to sell if report was negative
+		## More likely to buy if report was positive
 		if (t == Q1 || t == Q2 || t == Q3) {
 
 			q_results_l <- lapply(comp_healths_l, FUN = function(x) issue_earnings_report(p_vneg = x$p_vneg, p_neg = x$p_neg, 
